@@ -9,6 +9,7 @@ app.use(express.json())
 
 const { PORT, NODE_ENV, PORT_DEV } = process.env
 const port = NODE_ENV === 'development' ? PORT_DEV : PORT
+console.log(NODE_ENV)
 
 // routes
 app.use(router)

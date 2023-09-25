@@ -2,7 +2,9 @@
 /* eslint-disable no-unused-vars */
 const { Client } = require('pg')
 const connectionString = require('../database/database')
-const { createFolders } = require('../utils/createFolders')
+const { createFolders, searchDocuments } = require('../utils/createFolders')
+const { passwordCrypt, passwordDecrypt } = require('../utils/encryptPassword')
+
 const getMedic = async (req, res) => {
   try {
     const client = new Client({ connectionString })
@@ -41,23 +43,25 @@ const createMedic = async (req, res) => {
 
     if (signature.imageBase64) {
       resultSignature = await createFolders(signature.imageBase64, dni, name, 'created', signature?.type)
-    } else if (certificate.certificateBase64) {
+    }
+
+    if (certificate.certificateBase64) {
       resultCertificate = await createFolders(certificate.certificateBase64, dni, name, 'created', certificate?.type)
     }
 
+    const newPassword = password ? passwordCrypt(password) : ''
+
     const client = new Client({ connectionString })
     await client.connect()
-    await client.query('call sp_insert_medic ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)', [name, patLastName, matLastName, dni, birthdate.replace(/"/g, "'"), gender, description, codeCmp, codeRne, resultSignature, resultCertificate, password, specialty, userAccountId, userRegisterId])
-    const response = await client.query('select medic_id from medic order by medic_id desc limit 1')
-    // call sp_insert_result_exam ($1, $2, $3, $4, $5)
-    const createMedic = await client.query('select * from medic where medic_id = $1', [response.rows[0].medic_id])
+    await client.query('call sp_insert_medic ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)', [name, patLastName, matLastName, dni, birthdate.replace(/"/g, "'"), gender, description, codeCmp, codeRne, resultSignature, resultCertificate, newPassword, specialty, userAccountId, userRegisterId])
+    const response = await client.query('select*from medic order by medic_id desc limit 1')
     await client.end()
     res
       .status(200)
       .json({
         message: 'result added successfully',
         body: {
-          medic: createMedic.rows[0]
+          medic: response.rows[0]
         }
       })
   } catch (error) {
@@ -87,26 +91,41 @@ const updateMedic = async (req, res) => {
       medicId
     } = req.body
 
-    let resultSignature = false
-    let resultCertificate = false
-    console.log(medicId)
-    if (signature.imageBase64) {
-      resultSignature = await createFolders(signature.imageBase64, dni, name, 'update', signature?.type)
-    } else if (certificate.certificateBase64) {
-      resultCertificate = await createFolders(certificate.certificateBase64, dni, name, 'update', certificate?.type)
-    }
     const client = new Client({ connectionString })
     await client.connect()
-    await client.query('call sp_update_medic ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)', [name, patLastName, matLastName, dni, birthdate.replace(/"/g, "'"), gender, description, codeCmp, codeRne, resultSignature, resultCertificate, password, specialty, userAccountId, userRegisterId, medicId])
+    let resultSignature = false
+    let resultCertificate = false
+    let passwordMedic = ''
+
+    // si el request no trar ni una firma o certificado se debe mantener lo mismo
+    const searchInfo = await client.query('select password, signature, certificate from medic where medic_id = $1', [medicId])
+    resultSignature = searchInfo.rows[0].signature
+    resultCertificate = searchInfo.rows[0].certificate
+    passwordMedic = searchInfo.rows[0].password
+
+    if (signature.imageBase64) {
+      console.log('signature')
+      resultSignature = await createFolders(signature.imageBase64, dni, name, 'update', signature?.type)
+      resultSignature = true
+    }
+
+    if (certificate.certificateBase64) {
+      console.log('certificate')
+      resultCertificate = await createFolders(certificate.certificateBase64, dni, name, 'update', certificate?.type)
+      passwordMedic = passwordCrypt(password)
+      resultSignature = true
+    }
+
+    await client.query('call sp_update_medic ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)', [name, patLastName, matLastName, dni, birthdate.replace(/"/g, "'"), gender, description, codeCmp, codeRne, resultSignature, resultCertificate, passwordMedic, specialty, userAccountId, userRegisterId, medicId])
     const resultMedic = await client.query('select * from medic where medic_id = $1', [medicId])
-    console.log(resultMedic)
+    const updateMedic = [{ ...resultMedic.rows[0], password: resultMedic.rows[0].password.length > 0 ? resultMedic.rows[0].password : '' }]
     await client.end()
     res
       .status(200)
       .json({
         message: 'medic updated successfully',
         body: {
-          medic: [] // resultExam.rows[0]
+          medic: updateMedic // resultExam.rows[0]
         }
       })
   } catch (error) {
@@ -115,13 +134,63 @@ const updateMedic = async (req, res) => {
   }
 }
 
-const deleteMedic = (req, res) => {
+const deleteMedic = async (req, res) => {
+  try {
+    const {
+      medicId,
+      status,
+      userAccountId
+    } = req.body
 
+    const client = new Client({ connectionString })
+    await client.connect()
+    await client.query('call sp_disable_medic ($1, $2, $3)', [medicId, status, userAccountId])
+    const resultMedic = await client.query('select * from medic where medic_id = $1', [medicId])
+    const updateMedic = [{ ...resultMedic.rows[0], password: resultMedic.rows[0].password.length > 0 ? resultMedic.rows[0].password : '' }]
+    await client.end()
+    res
+      .status(200)
+      .json({
+        message: 'result disabled successfully',
+        body: {
+          medic: updateMedic
+        }
+      })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json(error)
+  }
+}
+
+const searchMedicSignatureCert = async (req, res) => {
+  try {
+    const { medic } = req.query
+    const client = new Client({ connectionString })
+    await client.connect()
+    const resultMedic = await client.query('select name, certificate, signature, password from medic where dni = $1', [medic])
+    const cert = resultMedic.rows[0].certificate === true ? 'p12' : ''
+    const sig = resultMedic.rows[0].signature === true ? 'image' : ''
+    const file = searchDocuments(medic, resultMedic.rows[0].name, { cert, sig })
+    const passDecrypt = cert === 'p12' ? passwordDecrypt(resultMedic.rows[0].password) : ''
+    res
+      .status(200)
+      .json({
+        message: 'result search successfully',
+        body: {
+          ...file,
+          password: passDecrypt
+        }
+      })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json(error)
+  }
 }
 
 module.exports = {
   getMedic,
   createMedic,
   updateMedic,
-  deleteMedic
+  deleteMedic,
+  searchMedicSignatureCert
 }

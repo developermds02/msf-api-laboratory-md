@@ -104,13 +104,11 @@ const updateMedic = async (req, res) => {
     passwordMedic = searchInfo.rows[0].password
 
     if (signature.imageBase64) {
-      console.log('signature')
       resultSignature = await createFolders(signature.imageBase64, dni, name, 'update', signature?.type)
       resultSignature = true
     }
 
     if (certificate.certificateBase64) {
-      console.log('certificate')
       resultCertificate = await createFolders(certificate.certificateBase64, dni, name, 'update', certificate?.type)
       passwordMedic = passwordCrypt(password)
       resultSignature = true
@@ -125,7 +123,7 @@ const updateMedic = async (req, res) => {
       .json({
         message: 'medic updated successfully',
         body: {
-          medic: updateMedic // resultExam.rows[0]
+          medic: updateMedic
         }
       })
   } catch (error) {

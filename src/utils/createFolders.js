@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const createFolders = (buffer, dni, name, status, type) => {
-  const folderBasePath = type === 'p12' ? '../certifies' : '../ImageSignin'
+  const folderBasePath = type === 'p12' ? '../documents/certifies' : '../documents/ImageSignin'
   const folderName = path.join(__dirname, folderBasePath, dni)
   const fileName = `${dni}-${name}.${type}`
   const filePath = path.join(folderName, fileName)
@@ -15,7 +15,6 @@ const createFolders = (buffer, dni, name, status, type) => {
     }
 
     if (fs.existsSync(folderName) && status === 'update' && type === 'p12') {
-      console.log('actualizando certificado')
       const files = fs.readdirSync(folderName, { recursive: true })
       files.forEach(file => {
         const structure = file.split('-')
@@ -50,8 +49,8 @@ const createFolders = (buffer, dni, name, status, type) => {
 }
 
 const searchDocuments = (dni, name, type) => {
-  const folderBasePath1 = type.cert === 'p12' ? '../certifies' : ''
-  const folderBasePath2 = type.sig === 'image' && '../ImageSignin'
+  const folderBasePath1 = type.cert === 'p12' ? '../documents/certifies' : ''
+  const folderBasePath2 = type.sig === 'image' && '../documents/ImageSignin'
   const folderNameImage = path.join(__dirname, folderBasePath2, dni)
   const folderNNameP12 = path.join(__dirname, folderBasePath1, dni)
 

@@ -111,3 +111,5 @@ AS $procedure$
     medic_id = _medicid;
   commit;
 end;$procedure$
+
+select*from specialty

@@ -168,7 +168,6 @@ const searchMedicSignatureCert = async (req, res) => {
     await client.connect()
     const resultMedic = await client.query('select name, certificate, signature, password from medic where dni = $1', [medic])
     if (resultMedic.rows[0].length === 0) res.status(500).json({ message: 'no existe el medico' })
-    console.log(resultMedic.rows[0])
     const cert = resultMedic.rows[0].certificate === true ? 'p12' : ''
     const sig = resultMedic.rows[0].signature === true ? 'image' : ''
     const file = searchDocuments(medic, resultMedic.rows[0].name, { cert, sig })
